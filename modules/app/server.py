@@ -119,6 +119,28 @@ async def add_city(user_id: int, city: CityCreate):
         user.city = new_city
         await session.commit()
         await session.refresh(new_city)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(URL_WHEATHER, params={
+                "latitude": city.latitude,
+                "longitude": city.longitude,
+                "hourly": "temperature_2m,windspeed_10m,pressure_msl,relative_humidity_2m,precipitation",
+                "start": datetime.now().strftime("%Y-%m-%dT00:00"),
+                "end": (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT00:00")
+            })
+
+            if response.status_code == 200:
+                data = response.json()
+                for hour, temperature in enumerate(data["hourly"]["temperature_2m"]):
+                    weather_entry = Weather(
+                        city_id=new_city.id,
+                        temperature=temperature,
+                        wind_speed=data["hourly"]["windspeed_10m"][hour],
+                        humidity=data["hourly"]["relative_humidity_2m"][hour],
+                        precipitation=data["hourly"]["precipitation"][hour],
+                        time=datetime.now() + timedelta(hours=hour)
+                    )
+                    session.add(weather_entry)
+                await session.commit()
         return {"id": new_city.id, "name": new_city.city, "latitude": new_city.latitude,
                 "longitude": new_city.longitude}
 
